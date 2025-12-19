@@ -60,12 +60,26 @@ export type SubmissionWithDetails = Submission & {
 }
 
 // Enums
-export type UserRole = 'teacher' | 'student' | 'ta'
+export type UserRole = 'teacher' | 'student' | 'ta' | 'admin'
 export type ActivityStatus = 'draft' | 'running' | 'ended'
 export type RoundStatus = 'open' | 'closed'
 export type GroupRole = 'explainer' | 'example' | 'challenger' | 'summarizer'
 export type SubmissionType = 'individual_choice' | 'final_choice'
 export type Choice = 'A' | 'B' | 'C' | 'D'
+
+// Session types
+export type SessionType = 'permanent' | 'temporary'
+
+// Unified user identity interface for hybrid authentication
+export type UserIdentity = {
+  id: string
+  role: UserRole
+  display_name: string
+  student_number: string | null
+  session_type: SessionType
+  activity_id?: string  // Only for temporary students
+  group_id?: string     // Only for temporary students
+}
 
 // Re-export JSONB types
 export type { QuestionChoices, RoundRules, MessageMeta, AnalyticsMetrics } from './database'

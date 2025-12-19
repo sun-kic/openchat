@@ -1,8 +1,9 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { ProfileInsert } from '@/types'
+import { ProfileInsert, UserIdentity } from '@/types'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 
 export async function signUpWithEmail(
   email: string,
@@ -106,4 +107,82 @@ export async function getCurrentProfile() {
   }
 
   return data
+}
+
+/**
+ * Get unified user identity supporting both permanent users and temporary students
+ * This is the new primary authentication function that replaces getCurrentProfile()
+ */
+export async function getCurrentIdentity(): Promise<UserIdentity | null> {
+  const supabase = await createClient()
+
+  // Try permanent auth first (teachers, admin, permanent students)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    // Fetch profile from database
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile) return null
+
+    return {
+      id: profile.id,
+      role: profile.role as any,
+      display_name: profile.display_name,
+      student_number: profile.student_number,
+      session_type: 'permanent',
+    }
+  }
+
+  // Try student session token
+  const sessionToken = await getStudentSessionToken()
+
+  if (sessionToken) {
+    const { data: session } = await supabase
+      .from('student_sessions')
+      .select('*')
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+
+    if (!session) {
+      // Session expired or invalid - clear cookie
+      const cookieStore = await cookies()
+      cookieStore.delete('student_session')
+      return null
+    }
+
+    // Update last active timestamp
+    await supabase
+      .from('student_sessions')
+      .update({ last_active_at: new Date().toISOString() })
+      .eq('id', session.id)
+
+    return {
+      id: session.id,
+      role: 'student',
+      display_name: session.display_name,
+      student_number: session.student_number,
+      session_type: 'temporary',
+      activity_id: session.activity_id,
+      group_id: session.group_id || undefined,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Helper function to get student session token from cookie
+ */
+async function getStudentSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies()
+  const cookie = cookieStore.get('student_session')
+  return cookie?.value || null
 }

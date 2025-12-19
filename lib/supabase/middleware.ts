@@ -35,15 +35,109 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/', '/login', '/signup', '/auth']
-  const isPublicRoute = publicRoutes.some(route =>
-    request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith('/auth/')
-  )
+  // Check for student session
+  const studentSessionToken = request.cookies.get('student_session')?.value
+  let validStudentSession = false
 
-  // Protect routes based on authentication
-  if (!user && !isPublicRoute) {
-    // No user, redirect to login
+  if (studentSessionToken) {
+    // Validate student session
+    const { data: session } = await supabase
+      .from('student_sessions')
+      .select('*')
+      .eq('session_token', studentSessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+
+    if (session) {
+      validStudentSession = true
+
+      // Update last active timestamp (fire and forget)
+      supabase
+        .from('student_sessions')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', session.id)
+        .then()
+    } else {
+      // Invalid/expired session - clear cookie
+      supabaseResponse.cookies.delete('student_session')
+    }
+  }
+
+  // Public routes that don't require authentication
+  const publicRoutes = ['/', '/login', '/auth']
+  const isPublicRoute =
+    publicRoutes.some(
+      (route) =>
+        request.nextUrl.pathname === route ||
+        request.nextUrl.pathname.startsWith('/auth/')
+    ) || request.nextUrl.pathname.startsWith('/join/')
+
+  // Block /signup route (no longer available)
+  if (request.nextUrl.pathname.startsWith('/signup')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // Admin route protection
+  if (request.nextUrl.pathname.startsWith('/admin/')) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    // Check admin role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      // Not admin - redirect to home
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Student route protection - requires either auth user or valid student session
+  if (request.nextUrl.pathname.startsWith('/student/')) {
+    if (!user && !validStudentSession) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Teacher route protection - requires auth user with teacher/ta/admin role
+  if (request.nextUrl.pathname.startsWith('/teacher/')) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (
+      profile?.role !== 'teacher' &&
+      profile?.role !== 'ta' &&
+      profile?.role !== 'admin'
+    ) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Protect other routes (except public) - requires some form of auth
+  if (!user && !validStudentSession && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

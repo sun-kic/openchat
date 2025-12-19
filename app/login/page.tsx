@@ -33,10 +33,10 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
         <div>
           <h2 className="text-center text-3xl font-bold text-gray-900">
-            Sign in to OpenChat
+            Teacher Login
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            PHP Concept Discussion Platform
+            OpenChat - PHP Concept Discussion Platform
           </p>
         </div>
 
@@ -91,11 +91,8 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="text-center text-sm">
-            <span className="text-gray-600">Don't have an account? </span>
-            <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign up
-            </Link>
+          <div className="text-center text-sm text-gray-600">
+            Contact your system administrator for account access.
           </div>
         </form>
       </div>

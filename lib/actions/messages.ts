@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentProfile } from './auth'
+import { getCurrentProfile, getCurrentIdentity } from './auth'
 import { revalidatePath } from 'next/cache'
 import { MessageInsert, MessageMeta, SubmissionInsert } from '@/types'
 
@@ -83,22 +83,32 @@ export async function submitMessage(
   replyToMessageId?: string
 ) {
   const supabase = await createClient()
-  const profile = await getCurrentProfile()
+  const identity = await getCurrentIdentity()
 
-  if (!profile || profile.role !== 'student') {
+  if (!identity || identity.role !== 'student') {
     return { error: 'Unauthorized' }
   }
 
-  // Verify student is in the group
-  const { data: membership } = await supabase
-    .from('group_members')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('user_id', profile.id)
-    .single()
+  // For temporary students, verify activity and group match
+  if (identity.session_type === 'temporary') {
+    if (identity.activity_id !== activityId) {
+      return { error: 'Activity mismatch - you can only access your assigned activity' }
+    }
+    if (identity.group_id !== groupId) {
+      return { error: 'You are not assigned to this group' }
+    }
+  } else {
+    // For permanent students, verify group membership
+    const { data: membership } = await supabase
+      .from('group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('user_id', identity.id)
+      .single()
 
-  if (!membership) {
-    return { error: 'You are not a member of this group' }
+    if (!membership) {
+      return { error: 'You are not a member of this group' }
+    }
   }
 
   // Get round rules
@@ -127,7 +137,7 @@ export async function submitMessage(
     question_id: questionId,
     group_id: groupId,
     round_id: roundId,
-    user_id: profile.id,
+    user_id: identity.id, // Works for both permanent and temporary users
     content: content.trim(),
     meta: validation.meta,
     reply_to: replyToMessageId || null,
@@ -155,29 +165,39 @@ export async function submitIndividualChoice(
   rationale: string
 ) {
   const supabase = await createClient()
-  const profile = await getCurrentProfile()
+  const identity = await getCurrentIdentity()
 
-  if (!profile || profile.role !== 'student') {
+  if (!identity || identity.role !== 'student') {
     return { error: 'Unauthorized' }
   }
 
-  // Verify membership
-  const { data: membership } = await supabase
-    .from('group_members')
-    .select('*')
-    .eq('group_id', groupId)
-    .eq('user_id', profile.id)
-    .single()
+  // For temporary students, verify activity and group match
+  if (identity.session_type === 'temporary') {
+    if (identity.activity_id !== activityId) {
+      return { error: 'Activity mismatch' }
+    }
+    if (identity.group_id !== groupId) {
+      return { error: 'You are not assigned to this group' }
+    }
+  } else {
+    // For permanent students, verify membership
+    const { data: membership } = await supabase
+      .from('group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('user_id', identity.id)
+      .single()
 
-  if (!membership) {
-    return { error: 'Unauthorized' }
+    if (!membership) {
+      return { error: 'Unauthorized' }
+    }
   }
 
   const submission: SubmissionInsert = {
     activity_id: activityId,
     question_id: questionId,
     group_id: groupId,
-    user_id: profile.id,
+    user_id: identity.id,
     type: 'individual_choice',
     choice,
     rationale: rationale.trim() || null,
@@ -206,10 +226,20 @@ export async function submitFinalChoice(
   rationale: string
 ) {
   const supabase = await createClient()
-  const profile = await getCurrentProfile()
+  const identity = await getCurrentIdentity()
 
-  if (!profile || profile.role !== 'student') {
+  if (!identity || identity.role !== 'student') {
     return { error: 'Unauthorized' }
+  }
+
+  // For temporary students, verify activity and group match
+  if (identity.session_type === 'temporary') {
+    if (identity.activity_id !== activityId) {
+      return { error: 'Activity mismatch' }
+    }
+    if (identity.group_id !== groupId) {
+      return { error: 'You are not assigned to this group' }
+    }
   }
 
   // Verify user is the group leader
@@ -219,7 +249,7 @@ export async function submitFinalChoice(
     .eq('id', groupId)
     .single()
 
-  if (!group || group.leader_user_id !== profile.id) {
+  if (!group || group.leader_user_id !== identity.id) {
     return { error: 'Only the group leader can submit the final choice' }
   }
 
@@ -230,7 +260,7 @@ export async function submitFinalChoice(
       final_choice: choice,
       final_rationale: rationale.trim(),
       final_submitted_at: new Date().toISOString(),
-      final_submitted_by: profile.id,
+      final_submitted_by: identity.id,
     })
     .eq('id', groupId)
 
@@ -243,7 +273,7 @@ export async function submitFinalChoice(
     activity_id: activityId,
     question_id: questionId,
     group_id: groupId,
-    user_id: profile.id,
+    user_id: identity.id,
     type: 'final_choice',
     choice,
     rationale: rationale.trim() || null,
@@ -267,9 +297,9 @@ export async function submitFinalChoice(
 
 export async function getGroupMessages(groupId: string, roundId: string) {
   const supabase = await createClient()
-  const profile = await getCurrentProfile()
+  const identity = await getCurrentIdentity()
 
-  if (!profile) {
+  if (!identity) {
     return { error: 'Not authenticated' }
   }
 

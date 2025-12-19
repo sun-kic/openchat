@@ -1,0 +1,4 @@
+# Language and Output Preferences
+- **Thinking Process**: Always perform your internal reasoning and "thinking" in English.
+- **Code & UI**: All generated code, variable names, comments, and application interface text must be in English.
+- **User Interaction**: Always respond to the user in Chinese (Simplified Chinese), regardless of whether the user's input is in English or Chinese. This includes explanations, feedback, and summaries.

@@ -66,9 +66,9 @@ export default function JoinActivityPage({
       return
     }
 
-    // Success - redirect to activity
-    router.push(`/student/activities/${result.activityId}`)
-    router.refresh()
+    // Success - redirect to activity with full page reload
+    // Using window.location ensures the new cookie is properly sent
+    window.location.href = `/student/activities/${result.activityId}`
   }
 
   if (loading && !activity) {

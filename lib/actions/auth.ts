@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { ProfileInsert, UserIdentity } from '@/types'
+import { Profile, ProfileInsert, UserIdentity } from '@/types'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 
@@ -89,7 +89,7 @@ export async function getCurrentUser() {
   return user
 }
 
-export async function getCurrentProfile() {
+export async function getCurrentProfile(): Promise<Profile | null> {
   const supabase = await createClient()
   const user = await getCurrentUser()
 

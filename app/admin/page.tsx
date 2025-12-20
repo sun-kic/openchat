@@ -2,6 +2,7 @@ import { getCurrentIdentity } from '@/lib/actions/auth'
 import { redirect } from 'next/navigation'
 import { listTeacherAccounts } from '@/lib/actions/admin'
 import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
 
 export default async function AdminDashboardPage() {
   const identity = await getCurrentIdentity()
@@ -11,15 +12,30 @@ export default async function AdminDashboardPage() {
   }
 
   const result = await listTeacherAccounts()
-  const teachers = result.data || []
+  const teachers = (result.data || []) as Array<{
+    id: string
+    display_name: string
+    created_at: string
+  }>
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-gray-900">OpenChat Admin</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">{identity.display_name}</span>
+            <LogoutButton />
+          </div>
+        </div>
+      </header>
+
       <div className="max-w-7xl mx-auto py-8 px-4">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Admin Dashboard
-          </h1>
+          <h2 className="text-3xl font-bold text-gray-900">
+            Dashboard
+          </h2>
           <p className="text-gray-600 mt-2">
             Manage teacher accounts and system settings
           </p>

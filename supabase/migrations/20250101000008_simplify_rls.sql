@@ -17,6 +17,13 @@ DROP POLICY IF EXISTS "Teachers can view course members" ON course_members;
 DROP POLICY IF EXISTS "Teachers can add course members" ON course_members;
 DROP POLICY IF EXISTS "Students can view own memberships" ON course_members;
 DROP POLICY IF EXISTS "Students can join courses" ON course_members;
+DROP POLICY IF EXISTS "courses_select_policy" ON courses;
+DROP POLICY IF EXISTS "courses_insert_policy" ON courses;
+DROP POLICY IF EXISTS "courses_update_policy" ON courses;
+DROP POLICY IF EXISTS "courses_delete_policy" ON courses;
+DROP POLICY IF EXISTS "course_members_select_policy" ON course_members;
+DROP POLICY IF EXISTS "course_members_insert_policy" ON course_members;
+DROP POLICY IF EXISTS "course_members_delete_policy" ON course_members;
 
 -- Re-enable RLS
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;

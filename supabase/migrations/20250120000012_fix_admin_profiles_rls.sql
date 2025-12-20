@@ -1,17 +1,33 @@
 -- =============================================
--- ALLOW USERS TO VIEW TEACHER AND PEER PROFILES
+-- FIX ADMIN PROFILES RLS (avoid recursive check)
 -- =============================================
 
--- Drop existing profile policies
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+-- Drop existing profile select policy
 DROP POLICY IF EXISTS "profiles_select_policy" ON profiles;
 
--- Recreate with ability to view teachers and course members
+-- Create a security definer function to check admin status
+-- This bypasses RLS to avoid infinite recursion
+CREATE OR REPLACE FUNCTION is_admin(user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = user_id AND role = 'admin'
+  );
+$$;
+
+-- Recreate policy using the function
 CREATE POLICY "profiles_select_policy"
   ON profiles FOR SELECT
   USING (
     -- Users can see their own profile
     auth.uid() = id
+    OR
+    -- Admins can see all profiles (using security definer function)
+    is_admin(auth.uid())
     OR
     -- Users can see teachers of courses they're in
     id IN (

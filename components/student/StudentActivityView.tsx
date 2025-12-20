@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { getCurrentRound, getGroupMessages } from '@/lib/actions/messages'
 import DiscussionRoom from './DiscussionRoom'
 
@@ -22,7 +24,7 @@ type Activity = {
       prompt: string
       context: string | null
       choices: any
-      concept_tags: string[]
+      concept_tags: string[] | null
     }
   }>
 }
@@ -43,14 +45,21 @@ type Group = {
 }
 
 export default function StudentActivityView({
-  activity,
-  userGroup,
+  activity: initialActivity,
+  userGroup: initialUserGroup,
   currentUserId,
+  isTemporaryStudent = false,
+  studentSession = null,
 }: {
   activity: Activity
-  userGroup: Group
+  userGroup: Group | null
   currentUserId: string
+  isTemporaryStudent?: boolean
+  studentSession?: any
 }) {
+  const router = useRouter()
+  const [activity, setActivity] = useState(initialActivity)
+  const [userGroup, setUserGroup] = useState(initialUserGroup)
   const [currentRound, setCurrentRound] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -60,7 +69,83 @@ export default function StudentActivityView({
   const currentQuestion =
     sortedQuestions[activity.current_question_index]?.questions
 
-  const isLeader = userGroup.leader_user_id === currentUserId
+  const isLeader = userGroup?.leader_user_id === currentUserId
+
+  // Track if we need to refresh due to status change
+  const [needsRefresh, setNeedsRefresh] = useState(false)
+
+  // Handle page refresh in a separate effect to avoid React update conflicts
+  useEffect(() => {
+    if (needsRefresh) {
+      setNeedsRefresh(false)
+      router.refresh()
+    }
+  }, [needsRefresh, router])
+
+  // Real-time subscription for activity status changes and group assignments
+  useEffect(() => {
+    const supabase = createClient()
+
+    // Subscribe to activity changes
+    const activityChannel = supabase
+      .channel(`activity:${activity.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'activities',
+          filter: `id=eq.${activity.id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Activity updated:', payload.new)
+          const newStatus = payload.new.status
+          const prevStatus = activity.status
+
+          // Update activity state
+          setActivity((prev) => ({ ...prev, ...payload.new }))
+
+          // Trigger refresh in separate effect if status changed
+          if (newStatus !== prevStatus) {
+            console.log('[Realtime] Status changed, scheduling refresh')
+            setNeedsRefresh(true)
+          }
+        }
+      )
+      .subscribe()
+
+    // Subscribe to student session changes (for group assignment) if temporary student
+    let sessionChannel: any = null
+    if (isTemporaryStudent && studentSession?.id) {
+      sessionChannel = supabase
+        .channel(`session:${studentSession.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'student_sessions',
+            filter: `id=eq.${studentSession.id}`,
+          },
+          (payload) => {
+            console.log('[Realtime] Session updated:', payload.new)
+            // If group_id changed, refresh to get new group data
+            if (payload.new.group_id && payload.new.group_id !== studentSession.group_id) {
+              console.log('[Realtime] Group assigned, scheduling refresh')
+              setNeedsRefresh(true)
+            }
+          }
+        )
+        .subscribe()
+    }
+
+    return () => {
+      supabase.removeChannel(activityChannel)
+      if (sessionChannel) {
+        supabase.removeChannel(sessionChannel)
+      }
+    }
+  }, [activity.id, activity.status, isTemporaryStudent, studentSession?.id, studentSession?.group_id])
 
   useEffect(() => {
     if (currentQuestion && activity.status === 'running') {
@@ -132,6 +217,38 @@ export default function StudentActivityView({
     )
   }
 
+  // Temporary students without a group assignment yet
+  if (!userGroup && isTemporaryStudent) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          Welcome, {studentSession?.display_name}!
+        </h1>
+        <p className="text-gray-600 mb-6">
+          You've joined the activity. Please wait for your teacher to assign you to a group.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
+          <p className="text-blue-800">Activity: {activity.title}</p>
+          <p className="text-blue-600 text-sm">Status: Waiting for group assignment</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Regular students without a group (shouldn't happen normally)
+  if (!userGroup) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          Not Assigned
+        </h1>
+        <p className="text-gray-600 mb-6">
+          You are not assigned to a group for this activity.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="h-screen flex flex-col">
       {/* Header */}
@@ -150,6 +267,9 @@ export default function StudentActivityView({
               </h1>
               <p className="text-sm text-gray-500">
                 {userGroup.name}
+                {isTemporaryStudent && studentSession && (
+                  <span className="ml-2 text-gray-400">({studentSession.display_name})</span>
+                )}
                 {isLeader && (
                   <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">
                     You are the leader

@@ -6,8 +6,8 @@ import {
   submitMessage,
   submitIndividualChoice,
   submitFinalChoice,
-  validateMessageContent,
 } from '@/lib/actions/messages'
+import { validateMessageContent } from '@/lib/utils/validation'
 import { useRealtimeMessages } from '@/lib/hooks/useRealtimeMessages'
 import { useRealtimePresence } from '@/lib/hooks/useRealtimePresence'
 
@@ -17,7 +17,7 @@ type Question = {
   prompt: string
   context: string | null
   choices: any
-  concept_tags: string[]
+  concept_tags: string[] | null
 }
 
 type Round = {
@@ -75,7 +75,7 @@ export default function DiscussionRoom({
       const validation = validateMessageContent(
         content,
         minLen,
-        question.concept_tags
+        question.concept_tags ?? undefined
       )
       setValidationInfo(validation)
     } else {
@@ -198,7 +198,7 @@ export default function DiscussionRoom({
             </h3>
             <div className="text-sm text-blue-800 space-y-1">
               <p>✓ Minimum {minLen} characters</p>
-              {question.concept_tags.length > 0 && (
+              {question.concept_tags && question.concept_tags.length > 0 && (
                 <p>✓ Use key concepts: {question.concept_tags.slice(0, 3).join(', ')}</p>
               )}
               {currentRound.round_no === 2 && <p>✓ Provide examples or edge cases</p>}

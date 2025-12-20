@@ -20,8 +20,22 @@ export default async function StudentCoursePage({
     redirect('/')
   }
 
-  const { data: course } = await getCourseById(id)
-  const { data: activities } = await getActivitiesByCourse(id)
+  const courseResult = await getCourseById(id)
+  const activitiesResult = await getActivitiesByCourse(id)
+
+  const course = courseResult.data as {
+    id: string
+    title: string
+    description: string | null
+  } | undefined
+
+  const activities = (activitiesResult.data || []) as Array<{
+    id: string
+    title: string
+    status: string
+    question_count: number
+    created_at: string
+  }>
 
   if (!course) {
     return (

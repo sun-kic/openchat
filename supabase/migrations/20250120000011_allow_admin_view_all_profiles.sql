@@ -1,17 +1,22 @@
 -- =============================================
--- ALLOW USERS TO VIEW TEACHER AND PEER PROFILES
+-- ALLOW ADMIN TO VIEW ALL PROFILES
 -- =============================================
 
--- Drop existing profile policies
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+-- Drop existing profile select policy
 DROP POLICY IF EXISTS "profiles_select_policy" ON profiles;
 
--- Recreate with ability to view teachers and course members
+-- Recreate with admin access to all profiles
 CREATE POLICY "profiles_select_policy"
   ON profiles FOR SELECT
   USING (
     -- Users can see their own profile
     auth.uid() = id
+    OR
+    -- Admins can see all profiles
+    EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.role = 'admin'
+    )
     OR
     -- Users can see teachers of courses they're in
     id IN (

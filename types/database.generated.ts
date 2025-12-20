@@ -80,6 +80,57 @@ export type Database = {
           },
         ]
       }
+      activity_invitations: {
+        Row: {
+          activity_id: string
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          token: string
+          use_count: number
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          token: string
+          use_count?: number
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          token?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_invitations_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_invitations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_questions: {
         Row: {
           activity_id: string
@@ -286,6 +337,10 @@ export type Database = {
         Row: {
           activity_id: string
           created_at: string
+          final_choice: string | null
+          final_rationale: string | null
+          final_submitted_at: string | null
+          final_submitted_by: string | null
           id: string
           leader_user_id: string | null
           name: string
@@ -293,6 +348,10 @@ export type Database = {
         Insert: {
           activity_id: string
           created_at?: string
+          final_choice?: string | null
+          final_rationale?: string | null
+          final_submitted_at?: string | null
+          final_submitted_by?: string | null
           id?: string
           leader_user_id?: string | null
           name: string
@@ -300,6 +359,10 @@ export type Database = {
         Update: {
           activity_id?: string
           created_at?: string
+          final_choice?: string | null
+          final_rationale?: string | null
+          final_submitted_at?: string | null
+          final_submitted_by?: string | null
           id?: string
           leader_user_id?: string | null
           name?: string
@@ -310,6 +373,13 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "groups_final_submitted_by_fkey"
+            columns: ["final_submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -330,6 +400,7 @@ export type Database = {
           id: string
           meta: Json | null
           question_id: string
+          reply_to: string | null
           reply_to_message_id: string | null
           round_id: string
           user_id: string
@@ -342,6 +413,7 @@ export type Database = {
           id?: string
           meta?: Json | null
           question_id: string
+          reply_to?: string | null
           reply_to_message_id?: string | null
           round_id: string
           user_id: string
@@ -354,6 +426,7 @@ export type Database = {
           id?: string
           meta?: Json | null
           question_id?: string
+          reply_to?: string | null
           reply_to_message_id?: string | null
           round_id?: string
           user_id?: string
@@ -378,6 +451,13 @@ export type Database = {
             columns: ["question_id"]
             isOneToOne: false
             referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
@@ -477,6 +557,7 @@ export type Database = {
       rounds: {
         Row: {
           activity_id: string
+          completed_at: string | null
           created_at: string
           end_at: string | null
           id: string
@@ -488,6 +569,7 @@ export type Database = {
         }
         Insert: {
           activity_id: string
+          completed_at?: string | null
           created_at?: string
           end_at?: string | null
           id?: string
@@ -499,6 +581,7 @@ export type Database = {
         }
         Update: {
           activity_id?: string
+          completed_at?: string | null
           created_at?: string
           end_at?: string | null
           id?: string
@@ -522,6 +605,70 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "questions"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_sessions: {
+        Row: {
+          activity_id: string
+          created_at: string
+          display_name: string
+          expires_at: string
+          group_id: string | null
+          id: string
+          invitation_token: string
+          last_active_at: string
+          meta: Json | null
+          session_token: string
+          student_number: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          display_name: string
+          expires_at: string
+          group_id?: string | null
+          id?: string
+          invitation_token: string
+          last_active_at?: string
+          meta?: Json | null
+          session_token: string
+          student_number: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          display_name?: string
+          expires_at?: string
+          group_id?: string | null
+          id?: string
+          invitation_token?: string
+          last_active_at?: string
+          meta?: Json | null
+          session_token?: string
+          student_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_sessions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_sessions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_sessions_invitation_token_fkey"
+            columns: ["invitation_token"]
+            isOneToOne: false
+            referencedRelation: "activity_invitations"
+            referencedColumns: ["token"]
           },
         ]
       }
@@ -667,6 +814,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activity_has_valid_invitation: {
+        Args: { p_activity_id: string }
+        Returns: boolean
+      }
       auto_group_students: {
         Args: { p_activity_id: string }
         Returns: undefined
@@ -687,6 +838,19 @@ export type Database = {
           total_messages: number
         }[]
       }
+      get_user_context: {
+        Args: never
+        Returns: {
+          role: string
+          session_type: string
+          user_id: string
+        }[]
+      }
+      is_activity_owner: {
+        Args: { p_activity_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_admin: { Args: { user_id: string }; Returns: boolean }
       rotate_group_leader: { Args: { p_group_id: string }; Returns: string }
       validate_message_content: {
         Args: { p_content: string; p_keywords: string[]; p_min_length?: number }

@@ -7,7 +7,9 @@ export default async function Home() {
 
   // If authenticated, redirect based on role
   if (profile) {
-    if (profile.role === 'teacher') {
+    if (profile.role === 'admin') {
+      redirect('/admin')
+    } else if (profile.role === 'teacher') {
       redirect('/teacher')
     } else if (profile.role === 'student') {
       redirect('/student')

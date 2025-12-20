@@ -7,12 +7,15 @@ export type Json =
   | Json[]
 
 export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
   public: {
     Tables: {
       profiles: {
         Row: {
           id: string
-          role: 'teacher' | 'student' | 'ta'
+          role: 'teacher' | 'student' | 'ta' | 'admin'
           display_name: string
           student_number: string | null
           created_at: string
@@ -20,7 +23,7 @@ export type Database = {
         }
         Insert: {
           id: string
-          role: 'teacher' | 'student' | 'ta'
+          role: 'teacher' | 'student' | 'ta' | 'admin'
           display_name: string
           student_number?: string | null
           created_at?: string
@@ -28,7 +31,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          role?: 'teacher' | 'student' | 'ta'
+          role?: 'teacher' | 'student' | 'ta' | 'admin'
           display_name?: string
           student_number?: string | null
           created_at?: string
@@ -391,6 +394,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
       [_ in never]: never
     }
   }

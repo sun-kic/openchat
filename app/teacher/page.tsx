@@ -10,7 +10,7 @@ export default async function TeacherDashboard() {
     redirect('/login')
   }
 
-  if (profile.role !== 'teacher' && profile.role !== 'ta') {
+  if (profile.role !== 'teacher' && profile.role !== 'ta' && profile.role !== 'admin') {
     redirect('/')
   }
 

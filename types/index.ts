@@ -1,4 +1,4 @@
-import { Database } from './database'
+import { Database } from './database.generated'
 
 // Convenience types
 export type Profile = Database['public']['Tables']['profiles']['Row']

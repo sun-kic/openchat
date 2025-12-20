@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateSecureToken } from '@/lib/utils/crypto'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
@@ -10,7 +10,9 @@ import { revalidatePath } from 'next/cache'
  * Checks if token is valid, active, not expired, and activity is running
  */
 export async function validateInvitationToken(token: string) {
-  const supabase = await createClient()
+  // Use service client to bypass RLS for invitation validation
+  // This is safe because we're just reading public invitation data
+  const supabase = createServiceClient()
 
   const { data: invitation, error } = await supabase
     .from('activity_invitations')
@@ -31,6 +33,7 @@ export async function validateInvitationToken(token: string) {
     .single()
 
   if (error || !invitation) {
+    console.log('[validateInvitationToken] Error or no invitation:', { error, invitation })
     return { valid: false, error: 'Invalid invitation link' }
   }
 
@@ -42,6 +45,12 @@ export async function validateInvitationToken(token: string) {
   // Check max uses
   if (invitation.max_uses && invitation.use_count >= invitation.max_uses) {
     return { valid: false, error: 'Invitation link has reached maximum uses' }
+  }
+
+  // Check if activity data was retrieved (RLS might block it)
+  if (!invitation.activities) {
+    console.log('[validateInvitationToken] Activity not accessible, invitation:', invitation)
+    return { valid: false, error: 'Activity not accessible' }
   }
 
   // Check activity status
@@ -65,7 +74,8 @@ export async function joinActivityWithToken(
   studentNumber: string,
   displayName: string
 ) {
-  const supabase = await createClient()
+  // Use service client to bypass RLS for session management
+  const supabase = createServiceClient()
 
   // 1. Validate invitation
   const validation = await validateInvitationToken(invitationToken)
@@ -74,6 +84,10 @@ export async function joinActivityWithToken(
   }
 
   const { activity, invitation } = validation
+
+  if (!activity) {
+    return { error: 'Activity not found' }
+  }
 
   // 2. Check for existing session
   const { data: existingSession } = await supabase
@@ -172,7 +186,7 @@ export async function endStudentSession() {
  * Get current student session info
  */
 export async function getStudentSessionInfo() {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('student_session')?.value
 
@@ -180,18 +194,71 @@ export async function getStudentSessionInfo() {
     return { data: null }
   }
 
-  const { data: session } = await supabase
+  const { data: session, error } = await supabase
     .from('student_sessions')
     .select('*')
     .eq('session_token', sessionToken)
     .gt('expires_at', new Date().toISOString())
     .single()
 
+  console.log('[getStudentSessionInfo] Query result:', { session: session?.id, error })
+
   if (!session) {
-    // Session expired - clear cookie
-    cookieStore.delete('student_session')
+    // Don't clear cookie here - let it be handled elsewhere
+    // This could be a race condition where session isn't committed yet
+    console.log('[getStudentSessionInfo] No session found, NOT clearing cookie')
     return { data: null }
   }
+
+  return { data: session }
+}
+
+/**
+ * Get student session for a specific activity
+ * Returns the session if it exists and is valid for this activity
+ */
+export async function getStudentSessionForActivity(activityId: string) {
+  const supabase = createServiceClient()
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get('student_session')?.value
+
+  console.log('[getStudentSessionForActivity] activityId:', activityId)
+  console.log('[getStudentSessionForActivity] sessionToken:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'not found')
+
+  if (!sessionToken) {
+    console.log('[getStudentSessionForActivity] No session token in cookie')
+    return { data: null }
+  }
+
+  // First, try to find any session with this token (to check if it exists at all)
+  const { data: anySession, error: anyError } = await supabase
+    .from('student_sessions')
+    .select('id, activity_id, session_token, expires_at')
+    .eq('session_token', sessionToken)
+    .single()
+
+  console.log('[getStudentSessionForActivity] Any session with token:', { anySession, anyError })
+
+  // Now try with activity filter
+  const { data: session, error } = await supabase
+    .from('student_sessions')
+    .select('*')
+    .eq('session_token', sessionToken)
+    .eq('activity_id', activityId)
+    .gt('expires_at', new Date().toISOString())
+    .single()
+
+  console.log('[getStudentSessionForActivity] Session for activity:', { sessionId: session?.id, error })
+
+  if (!session) {
+    return { data: null }
+  }
+
+  // Update last active timestamp
+  await supabase
+    .from('student_sessions')
+    .update({ last_active_at: new Date().toISOString() })
+    .eq('id', session.id)
 
   return { data: session }
 }

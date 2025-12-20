@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfile } from './auth'
 import { revalidatePath } from 'next/cache'
 import { QuestionInsert, QuestionChoices } from '@/types'
+import { Json } from '@/types/database.generated'
 
 export async function createQuestion(
   courseId: string,
@@ -43,7 +44,7 @@ export async function createQuestion(
     prompt,
     context: context || null,
     concept_tags: conceptTags,
-    choices,
+    choices: choices as unknown as Json,
   }
 
   const { data, error } = await supabase
@@ -135,6 +136,9 @@ export async function getQuestionById(questionId: string) {
   const isTeacher = data.courses?.teacher_id === profile.id
 
   if (!isTeacher && profile.role === 'student') {
+    if (!data.course_id) {
+      return { error: 'Question has no course' }
+    }
     const { data: enrollment } = await supabase
       .from('course_members')
       .select('*')
@@ -194,7 +198,7 @@ export async function updateQuestion(
       prompt,
       context: context || null,
       concept_tags: conceptTags,
-      choices,
+      choices: choices as unknown as Json,
     })
     .eq('id', questionId)
 

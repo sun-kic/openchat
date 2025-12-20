@@ -82,8 +82,8 @@ export default function CreateQuestionDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full my-8">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg p-6 max-w-3xl w-full my-8 max-h-none">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">
           Create New Question
         </h2>

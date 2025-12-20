@@ -177,8 +177,8 @@ function QuestionDetailModal({
         <div className="mb-6">
           <h4 className="text-sm font-semibold text-gray-900 mb-3">Answer Choices</h4>
           <div className="space-y-3">
-            {choices.map((key) => {
-              const choice = question.choices[key]
+            {question.choices && choices.map((key) => {
+              const choice = (question.choices as any)[key]
               return (
                 <div
                   key={key}

@@ -126,6 +126,18 @@ export default function StudentActivityView({
     }
   }, [currentQuestion, activity.status, loadCurrentRound])
 
+  // Polling fallback for round updates (every 5 seconds)
+  // This ensures temporary students get round updates even when realtime fails due to RLS
+  useEffect(() => {
+    if (!currentQuestion || activity.status !== 'running') return
+
+    const pollInterval = setInterval(() => {
+      loadCurrentRound()
+    }, 5000) // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [currentQuestion, activity.status, loadCurrentRound])
+
   // Real-time subscription for activity status changes, group assignments, and round changes
   useEffect(() => {
     const supabase = createClient()

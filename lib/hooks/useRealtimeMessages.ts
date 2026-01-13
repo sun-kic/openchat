@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getGroupMessages } from '@/lib/actions/messages'
 import { MessageMeta } from '@/types/database'
 
 type MessageWithProfile = {
@@ -36,32 +37,19 @@ export function useRealtimeMessages(groupId: string, roundId: string) {
 
   const fetchMessages = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('messages')
-      .select(`
-        *,
-        profiles!messages_user_id_fkey (
-          id,
-          display_name,
-          student_number
-        ),
-        parent_message:messages!messages_reply_to_message_id_fkey (
-          id,
-          content,
-          profiles!messages_user_id_fkey (
-            display_name
-          )
-        )
-      `)
-      .eq('group_id', groupId)
-      .eq('round_id', roundId)
-      .order('created_at', { ascending: true })
 
-    if (data && !error) {
-      setMessages(data as unknown as MessageWithProfile[])
+    // Use server action to fetch messages (handles auth and RLS bypass for temp students)
+    const result = await getGroupMessages(groupId, roundId)
+
+    if (result.error) {
+      console.error('[useRealtimeMessages] Error fetching messages:', result.error)
+      setLoading(false)
+      return
     }
+
+    setMessages(result.data as MessageWithProfile[] || [])
     setLoading(false)
-  }, [supabase, groupId, roundId])
+  }, [groupId, roundId])
 
   useEffect(() => {
     // Initial fetch
@@ -79,30 +67,14 @@ export function useRealtimeMessages(groupId: string, roundId: string) {
           filter: `group_id=eq.${groupId}`,
         },
         async (payload) => {
-          // Fetch the full message with profile data
-          const { data } = await supabase
-            .from('messages')
-            .select(`
-              *,
-              profiles!messages_user_id_fkey (
-                id,
-                display_name,
-                student_number
-              ),
-              parent_message:messages!messages_reply_to_message_id_fkey (
-                id,
-                content,
-                profiles!messages_user_id_fkey (
-                  display_name
-                )
-              )
-            `)
-            .eq('id', (payload.new as { id: string }).id)
-            .single()
+          const newMsg = payload.new as { id: string; user_id: string; round_id: string }
 
-          if (data && (data as unknown as MessageWithProfile).round_id === roundId) {
-            setMessages((current) => [...current, data as unknown as MessageWithProfile])
-          }
+          // Only process if it's for the current round
+          if (newMsg.round_id !== roundId) return
+
+          // Refetch all messages via server action to get proper user info
+          // This ensures consistency and handles both permanent and temp users
+          await fetchMessages()
         }
       )
       .subscribe()

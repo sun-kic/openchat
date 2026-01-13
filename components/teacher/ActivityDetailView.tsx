@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { startActivity, endActivity, deleteActivity } from '@/lib/actions/activities'
+import { startActivity, endActivity, deleteActivity, assignPendingStudentsToGroups } from '@/lib/actions/activities'
 import { getRoundsByActivity } from '@/lib/actions/rounds'
 import { generateActivityInvitation, listActivityInvitations, revokeInvitation } from '@/lib/actions/invitations'
 import RoundControl from './RoundControl'
+import GroupMessagesView from './GroupMessagesView'
 
 type Activity = {
   id: string
@@ -57,6 +58,7 @@ export default function ActivityDetailView({ activity }: { activity: Activity })
   const [invitations, setInvitations] = useState<any[]>([])
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const [assigningGroups, setAssigningGroups] = useState(false)
 
   const sortedQuestions = [...activity.activity_questions].sort((a, b) => a.order_index - b.order_index)
   const currentQuestion = sortedQuestions[activity.current_question_index]?.questions
@@ -162,6 +164,18 @@ export default function ActivityDetailView({ activity }: { activity: Activity })
     } else {
       router.push(`/teacher/courses/${activity.courses.id}`)
     }
+  }
+
+  const handleAssignGroups = async () => {
+    setAssigningGroups(true)
+    const result = await assignPendingStudentsToGroups(activity.id)
+
+    if (result.error) {
+      alert(result.error)
+    } else {
+      router.refresh()
+    }
+    setAssigningGroups(false)
   }
 
   return (
@@ -333,10 +347,19 @@ export default function ActivityDetailView({ activity }: { activity: Activity })
 
       {/* Groups */}
       <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200">
+        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-900">
             Groups ({activity.groups.length}) - Auto-grouped (4 per group)
           </h2>
+          {activity.status === 'running' && (
+            <button
+              onClick={handleAssignGroups}
+              disabled={assigningGroups}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              {assigningGroups ? 'Assigning...' : 'Assign Pending Students'}
+            </button>
+          )}
         </div>
         {activity.groups.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
@@ -407,6 +430,29 @@ export default function ActivityDetailView({ activity }: { activity: Activity })
           </div>
         )}
       </div>
+
+      {/* Message Monitoring */}
+      {activity.status === 'running' && currentRound && activity.groups.length > 0 && (
+        <div className="bg-white rounded-lg shadow mt-6">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Student Discussions - Round {currentRound.round_no}
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Click on a group to view their messages
+            </p>
+          </div>
+          <div className="p-6 space-y-4">
+            {activity.groups.map((group) => (
+              <GroupMessagesView
+                key={group.id}
+                group={group}
+                roundId={currentRound.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Delete Dialog */}
       {showDeleteDialog && (

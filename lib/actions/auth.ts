@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { Profile, ProfileInsert, UserIdentity } from '@/types'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -114,9 +114,45 @@ export async function getCurrentProfile(): Promise<Profile | null> {
  * This is the new primary authentication function that replaces getCurrentProfile()
  */
 export async function getCurrentIdentity(): Promise<UserIdentity | null> {
-  const supabase = await createClient()
+  // Check for student session token FIRST
+  // This allows temporary students to work even in browsers where a teacher is logged in
+  const sessionToken = await getStudentSessionToken()
 
-  // Try permanent auth first (teachers, admin, permanent students)
+  if (sessionToken) {
+    // Use service client to bypass RLS for student session lookup
+    const serviceSupabase = createServiceClient()
+    const { data: session } = await serviceSupabase
+      .from('student_sessions')
+      .select('*')
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+
+    if (session) {
+      // Update last active timestamp
+      await serviceSupabase
+        .from('student_sessions')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', session.id)
+
+      return {
+        id: session.id,
+        role: 'student',
+        display_name: session.display_name,
+        student_number: session.student_number,
+        session_type: 'temporary',
+        activity_id: session.activity_id,
+        group_id: session.group_id || undefined,
+      }
+    } else {
+      // Session expired or invalid - clear cookie
+      const cookieStore = await cookies()
+      cookieStore.delete('student_session')
+    }
+  }
+
+  // Fall back to permanent auth (teachers, admin, permanent students)
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -137,41 +173,6 @@ export async function getCurrentIdentity(): Promise<UserIdentity | null> {
       display_name: profile.display_name,
       student_number: profile.student_number,
       session_type: 'permanent',
-    }
-  }
-
-  // Try student session token
-  const sessionToken = await getStudentSessionToken()
-
-  if (sessionToken) {
-    const { data: session } = await supabase
-      .from('student_sessions')
-      .select('*')
-      .eq('session_token', sessionToken)
-      .gt('expires_at', new Date().toISOString())
-      .single()
-
-    if (!session) {
-      // Session expired or invalid - clear cookie
-      const cookieStore = await cookies()
-      cookieStore.delete('student_session')
-      return null
-    }
-
-    // Update last active timestamp
-    await supabase
-      .from('student_sessions')
-      .update({ last_active_at: new Date().toISOString() })
-      .eq('id', session.id)
-
-    return {
-      id: session.id,
-      role: 'student',
-      display_name: session.display_name,
-      student_number: session.student_number,
-      session_type: 'temporary',
-      activity_id: session.activity_id,
-      group_id: session.group_id || undefined,
     }
   }
 

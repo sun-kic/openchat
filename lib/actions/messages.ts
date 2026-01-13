@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getCurrentProfile, getCurrentIdentity } from './auth'
 import { revalidatePath } from 'next/cache'
 import { MessageInsert, SubmissionInsert } from '@/types'
@@ -15,12 +15,27 @@ export async function submitMessage(
   content: string,
   replyToMessageId?: string
 ) {
-  const supabase = await createClient()
   const identity = await getCurrentIdentity()
 
+  console.log('[submitMessage] Identity:', identity ? {
+    id: identity.id,
+    role: identity.role,
+    session_type: identity.session_type,
+    activity_id: identity.activity_id,
+    group_id: identity.group_id
+  } : 'null')
+  console.log('[submitMessage] Requested groupId:', groupId)
+
   if (!identity || identity.role !== 'student') {
+    console.log('[submitMessage] Unauthorized - identity:', identity)
     return { error: 'Unauthorized' }
   }
+
+  // Use service client for temporary students (they don't have Supabase auth)
+  // Use regular client for permanent students (RLS will apply)
+  const supabase = identity.session_type === 'temporary'
+    ? createServiceClient()
+    : await createClient()
 
   // For temporary students, verify activity and group match
   if (identity.session_type === 'temporary') {
@@ -45,22 +60,30 @@ export async function submitMessage(
   }
 
   // Get round rules
-  const { data: round } = await supabase
+  console.log('[submitMessage] Fetching round:', roundId)
+  const { data: round, error: roundError } = await supabase
     .from('rounds')
     .select('*, questions(concept_tags)')
     .eq('id', roundId)
     .single()
 
+  console.log('[submitMessage] Round result:', { round: round?.id, status: round?.status, error: roundError })
+
   if (!round || round.status !== 'open') {
+    console.log('[submitMessage] Round not open:', { round, roundError })
     return { error: 'This round is not open for submissions' }
   }
 
   // Validate content
   const minLen = (round.rules as any)?.min_len || 20
   const conceptTags = (round.questions as any)?.concept_tags || []
+  console.log('[submitMessage] Validating content:', { contentLength: content.length, minLen, conceptTags })
   const validation = validateMessageContent(content, minLen, conceptTags)
 
+  console.log('[submitMessage] Validation result:', validation)
+
   if (!validation.valid) {
+    console.log('[submitMessage] Validation failed:', validation.error)
     return { error: validation.error }
   }
 
@@ -76,13 +99,17 @@ export async function submitMessage(
     reply_to: replyToMessageId || null,
   }
 
+  console.log('[submitMessage] Inserting message:', message)
   const { data, error } = await supabase
     .from('messages')
     .insert(message)
     .select()
     .single()
 
+  console.log('[submitMessage] Insert result:', { data: data?.id, error })
+
   if (error) {
+    console.log('[submitMessage] Insert error:', error)
     return { error: error.message }
   }
 
@@ -229,39 +256,87 @@ export async function submitFinalChoice(
 }
 
 export async function getGroupMessages(groupId: string, roundId: string) {
-  const supabase = await createClient()
   const identity = await getCurrentIdentity()
 
   if (!identity) {
     return { error: 'Not authenticated' }
   }
 
-  const { data, error } = await supabase
+  // Use service client to bypass RLS for message fetching
+  // Authorization is checked via identity above
+  const supabase = createServiceClient()
+
+  // Verify user has access to this group
+  if (identity.session_type === 'temporary') {
+    // Temporary students must be assigned to this group
+    if (identity.group_id !== groupId) {
+      return { error: 'Not authorized to view this group' }
+    }
+  } else if (identity.role === 'student') {
+    // Permanent students must be members of this group
+    const { data: membership } = await supabase
+      .from('group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('user_id', identity.id)
+      .single()
+
+    if (!membership) {
+      return { error: 'Not authorized to view this group' }
+    }
+  }
+  // Teachers/TAs/Admins can view any group
+
+  // Fetch messages without profile join
+  const { data: messagesData, error: messagesError } = await supabase
     .from('messages')
-    .select(`
-      *,
-      profiles!messages_user_id_fkey (
-        id,
-        display_name,
-        student_number
-      ),
-      parent_message:messages!messages_reply_to_fkey (
-        id,
-        content,
-        profiles!messages_user_id_fkey (
-          display_name
-        )
-      )
-    `)
+    .select('*')
     .eq('group_id', groupId)
     .eq('round_id', roundId)
     .order('created_at', { ascending: true })
 
-  if (error) {
-    return { error: error.message }
+  if (messagesError) {
+    return { error: messagesError.message }
   }
 
-  return { data }
+  if (!messagesData || messagesData.length === 0) {
+    return { data: [] }
+  }
+
+  // Get unique user IDs from messages
+  const userIds = [...new Set(messagesData.map(m => m.user_id))]
+
+  // Fetch profiles for these user IDs (permanent users)
+  const { data: profilesData } = await supabase
+    .from('profiles')
+    .select('id, display_name, student_number')
+    .in('id', userIds)
+
+  // Fetch student sessions for these user IDs (temporary students)
+  const { data: sessionsData } = await supabase
+    .from('student_sessions')
+    .select('id, display_name, student_number')
+    .in('id', userIds)
+
+  // Create a lookup map for user info
+  const userMap = new Map<string, { id: string; display_name: string; student_number: string | null }>()
+
+  profilesData?.forEach(p => {
+    userMap.set(p.id, { id: p.id, display_name: p.display_name, student_number: p.student_number })
+  })
+
+  sessionsData?.forEach(s => {
+    userMap.set(s.id, { id: s.id, display_name: s.display_name, student_number: s.student_number })
+  })
+
+  // Map messages with user info
+  const messagesWithProfiles = messagesData.map(msg => ({
+    ...msg,
+    profiles: userMap.get(msg.user_id) || { id: msg.user_id, display_name: 'Unknown', student_number: null },
+    parent_message: null // TODO: Handle reply_to if needed
+  }))
+
+  return { data: messagesWithProfiles }
 }
 
 export async function getCurrentRound(activityId: string, questionId: string) {

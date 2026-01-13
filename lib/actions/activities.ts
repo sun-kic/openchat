@@ -465,6 +465,41 @@ async function autoAssignTemporaryStudentsToGroups(activityId: string) {
   }
 }
 
+/**
+ * Manually trigger group assignment for temporary students
+ * Used when students join after activity has started
+ */
+export async function assignPendingStudentsToGroups(activityId: string) {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile) {
+    return { error: 'Not authenticated' }
+  }
+
+  // Verify ownership
+  const { data: activity } = await supabase
+    .from('activities')
+    .select(`
+      *,
+      courses (
+        teacher_id
+      )
+    `)
+    .eq('id', activityId)
+    .single()
+
+  if (!activity || activity.courses?.teacher_id !== profile.id) {
+    return { error: 'Unauthorized' }
+  }
+
+  // Run the auto-assignment
+  await autoAssignTemporaryStudentsToGroups(activityId)
+
+  revalidatePath(`/teacher/activities/${activityId}`)
+  return { success: true }
+}
+
 export async function endActivity(activityId: string) {
   const supabase = await createClient()
   const profile = await getCurrentProfile()

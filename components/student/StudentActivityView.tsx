@@ -108,7 +108,25 @@ export default function StudentActivityView({
     }
   }, [needsRefresh, router])
 
-  // Real-time subscription for activity status changes and group assignments
+  // Define loadCurrentRound before using it in subscriptions
+  const loadCurrentRound = useCallback(async () => {
+    if (!currentQuestion) return
+
+    const { data } = await getCurrentRound(activity.id, currentQuestion.id)
+    setCurrentRound(data)
+    setLoading(false)
+  }, [activity.id, currentQuestion])
+
+  // Load current round on mount and when activity status changes
+  useEffect(() => {
+    if (currentQuestion && activity.status === 'running') {
+      loadCurrentRound()
+    } else {
+      setLoading(false)
+    }
+  }, [currentQuestion, activity.status, loadCurrentRound])
+
+  // Real-time subscription for activity status changes, group assignments, and round changes
   useEffect(() => {
     const supabase = createClient()
 
@@ -140,6 +158,25 @@ export default function StudentActivityView({
       )
       .subscribe()
 
+    // Subscribe to round changes (start/end rounds)
+    const roundsChannel = supabase
+      .channel(`rounds:${activity.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'rounds',
+          filter: `activity_id=eq.${activity.id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Round changed:', payload)
+          // Reload current round when any round changes
+          loadCurrentRound()
+        }
+      )
+      .subscribe()
+
     // Subscribe to student session changes (for group assignment) if temporary student
     let sessionChannel: ReturnType<typeof supabase.channel> | null = null
     if (isTemporaryStudent && studentSession?.id) {
@@ -167,27 +204,12 @@ export default function StudentActivityView({
 
     return () => {
       supabase.removeChannel(activityChannel)
+      supabase.removeChannel(roundsChannel)
       if (sessionChannel) {
         supabase.removeChannel(sessionChannel)
       }
     }
-  }, [activity.id, activity.status, isTemporaryStudent, studentSession?.id, studentSession?.group_id])
-
-  const loadCurrentRound = useCallback(async () => {
-    if (!currentQuestion) return
-
-    const { data } = await getCurrentRound(activity.id, currentQuestion.id)
-    setCurrentRound(data)
-    setLoading(false)
-  }, [activity.id, currentQuestion])
-
-  useEffect(() => {
-    if (currentQuestion && activity.status === 'running') {
-      loadCurrentRound()
-    } else {
-      setLoading(false)
-    }
-  }, [currentQuestion, activity.status, loadCurrentRound])
+  }, [activity.id, activity.status, isTemporaryStudent, studentSession?.id, studentSession?.group_id, loadCurrentRound])
 
   if (activity.status === 'draft') {
     return (

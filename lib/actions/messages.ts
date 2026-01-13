@@ -340,7 +340,16 @@ export async function getGroupMessages(groupId: string, roundId: string) {
 }
 
 export async function getCurrentRound(activityId: string, questionId: string) {
-  const supabase = await createClient()
+  const identity = await getCurrentIdentity()
+
+  if (!identity) {
+    return { data: null }
+  }
+
+  // Use service client for temporary students to bypass RLS
+  const supabase = identity.session_type === 'temporary'
+    ? createServiceClient()
+    : await createClient()
 
   const { data, error } = await supabase
     .from('rounds')
@@ -353,6 +362,7 @@ export async function getCurrentRound(activityId: string, questionId: string) {
     .single()
 
   if (error) {
+    console.log('[getCurrentRound] Error:', error)
     return { data: null }
   }
 

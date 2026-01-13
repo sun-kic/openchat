@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type PresenceState = {
@@ -16,7 +16,7 @@ export function useRealtimePresence(
   displayName: string
 ) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const channel = supabase.channel(`presence:group:${groupId}`, {
@@ -33,10 +33,10 @@ export function useRealtimePresence(
         const users = Object.keys(state)
         setOnlineUsers(users)
       })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+      .on('presence', { event: 'join' }, ({ key }) => {
         console.log('User joined:', key)
       })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+      .on('presence', { event: 'leave' }, ({ key }) => {
         console.log('User left:', key)
       })
       .subscribe(async (status) => {
@@ -52,7 +52,7 @@ export function useRealtimePresence(
       channel.untrack()
       supabase.removeChannel(channel)
     }
-  }, [groupId, currentUserId, displayName])
+  }, [groupId, currentUserId, displayName, supabase])
 
   return { onlineUsers }
 }

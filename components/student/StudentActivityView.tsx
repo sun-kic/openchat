@@ -4,8 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getCurrentRound, getGroupMessages } from '@/lib/actions/messages'
+import { getCurrentRound } from '@/lib/actions/messages'
 import DiscussionRoom from './DiscussionRoom'
+
+import { Json } from '@/types'
+
+type Choices = Json
 
 type Activity = {
   id: string
@@ -23,9 +27,15 @@ type Activity = {
       title: string
       prompt: string
       context: string | null
-      choices: any
+      choices: Choices
       concept_tags: string[] | null
     }
+  }>
+  groups?: Array<{
+    id: string
+    group_members?: Array<{
+      user_id: string
+    }>
   }>
 }
 
@@ -33,6 +43,7 @@ type Group = {
   id: string
   name: string
   leader_user_id: string | null
+  final_choice?: string | null
   group_members: Array<{
     user_id: string
     seat_no: number
@@ -42,6 +53,21 @@ type Group = {
       student_number: string | null
     }
   }>
+}
+
+type StudentSession = {
+  id: string
+  activity_id: string
+  group_id: string | null
+  display_name: string
+  student_number: string
+}
+
+type Round = {
+  id: string
+  round_no: number
+  status: string
+  rules: Json | null
 }
 
 export default function StudentActivityView({
@@ -55,12 +81,12 @@ export default function StudentActivityView({
   userGroup: Group | null
   currentUserId: string
   isTemporaryStudent?: boolean
-  studentSession?: any
+  studentSession?: StudentSession | null
 }) {
   const router = useRouter()
   const [activity, setActivity] = useState(initialActivity)
-  const [userGroup, setUserGroup] = useState(initialUserGroup)
-  const [currentRound, setCurrentRound] = useState<any>(null)
+  const [userGroup] = useState(initialUserGroup)
+  const [currentRound, setCurrentRound] = useState<Round | null>(null)
   const [loading, setLoading] = useState(true)
 
   const sortedQuestions = [...activity.activity_questions].sort(
@@ -115,7 +141,7 @@ export default function StudentActivityView({
       .subscribe()
 
     // Subscribe to student session changes (for group assignment) if temporary student
-    let sessionChannel: any = null
+    let sessionChannel: ReturnType<typeof supabase.channel> | null = null
     if (isTemporaryStudent && studentSession?.id) {
       sessionChannel = supabase
         .channel(`session:${studentSession.id}`)
@@ -147,21 +173,21 @@ export default function StudentActivityView({
     }
   }, [activity.id, activity.status, isTemporaryStudent, studentSession?.id, studentSession?.group_id])
 
+  const loadCurrentRound = useCallback(async () => {
+    if (!currentQuestion) return
+
+    const { data } = await getCurrentRound(activity.id, currentQuestion.id)
+    setCurrentRound(data)
+    setLoading(false)
+  }, [activity.id, currentQuestion])
+
   useEffect(() => {
     if (currentQuestion && activity.status === 'running') {
       loadCurrentRound()
     } else {
       setLoading(false)
     }
-  }, [currentQuestion, activity.status])
-
-  const loadCurrentRound = async () => {
-    if (!currentQuestion) return
-
-    const { data } = await getCurrentRound(activity.id, currentQuestion.id)
-    setCurrentRound(data)
-    setLoading(false)
-  }
+  }, [currentQuestion, activity.status, loadCurrentRound])
 
   if (activity.status === 'draft') {
     return (
@@ -170,7 +196,7 @@ export default function StudentActivityView({
           Activity Not Started
         </h1>
         <p className="text-gray-600 mb-6">
-          This activity hasn't started yet. Please wait for your teacher to begin.
+          This activity has not started yet. Please wait for your teacher to begin.
         </p>
         <Link
           href="/student"
@@ -225,7 +251,7 @@ export default function StudentActivityView({
           Welcome, {studentSession?.display_name}!
         </h1>
         <p className="text-gray-600 mb-6">
-          You've joined the activity. Please wait for your teacher to assign you to a group.
+          You have joined the activity. Please wait for your teacher to assign you to a group.
         </p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
           <p className="text-blue-800">Activity: {activity.title}</p>

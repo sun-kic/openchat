@@ -432,5 +432,5 @@ export interface AnalyticsMetrics {
   peer_review_count?: number
   avg_message_length?: number
   completion_rate?: number
-  [key: string]: any
+  [key: string]: number | undefined
 }

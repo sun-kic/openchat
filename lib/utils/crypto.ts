@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 
 /**
  * Generate a cryptographically secure random token with a prefix
@@ -13,10 +13,9 @@ export function generateSecureToken(prefix: string): string {
 
 /**
  * Generate an activity invitation token
- * @param activityId - Activity UUID (for debugging purposes in logs)
  * @returns Secure invitation token
  */
-export function generateInvitationToken(activityId: string): string {
+export function generateInvitationToken(): string {
   const timestamp = Date.now().toString(36) // Base36 timestamp (compact)
   const random = randomBytes(24).toString('base64url') // 24 bytes of randomness
   return `act_inv_${timestamp}_${random}`
@@ -48,6 +47,5 @@ export function generateSecurePassword(length: number = 16): string {
  * @returns Hex-encoded SHA-256 hash
  */
 export function hashToken(token: string): string {
-  const { createHash } = require('crypto')
   return createHash('sha256').update(token).digest('hex')
 }

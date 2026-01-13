@@ -1,22 +1,25 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   submitMessage,
-  submitIndividualChoice,
   submitFinalChoice,
 } from '@/lib/actions/messages'
 import { validateMessageContent } from '@/lib/utils/validation'
 import { useRealtimeMessages } from '@/lib/hooks/useRealtimeMessages'
 import { useRealtimePresence } from '@/lib/hooks/useRealtimePresence'
 
+import { Json } from '@/types'
+
+type Choices = Json
+
 type Question = {
   id: string
   title: string
   prompt: string
   context: string | null
-  choices: any
+  choices: Choices
   concept_tags: string[] | null
 }
 
@@ -24,7 +27,49 @@ type Round = {
   id: string
   round_no: number
   status: string
-  rules: any
+  rules: Json | null
+}
+
+type GroupMember = {
+  user_id: string
+  seat_no: number
+  profiles: {
+    id: string
+    display_name: string
+    student_number: string | null
+  }
+}
+
+type Group = {
+  id: string
+  name: string
+  final_choice?: string | null
+  group_members: GroupMember[]
+}
+
+type Activity = {
+  id: string
+  title: string
+  status: string
+}
+
+type MessageData = {
+  id: string
+  content: string
+  user_id: string
+  profiles: {
+    display_name: string
+  }
+}
+
+type ValidationResult = {
+  valid: boolean
+  error?: string
+  meta: {
+    keyword_hits?: string[]
+    has_causality?: boolean
+    has_example?: boolean
+  }
 }
 
 export default function DiscussionRoom({
@@ -35,9 +80,9 @@ export default function DiscussionRoom({
   currentUserId,
   isLeader,
 }: {
-  activity: any
+  activity: Activity
   question: Question
-  group: any
+  group: Group
   currentRound: Round | null
   currentUserId: string
   isLeader: boolean
@@ -46,21 +91,19 @@ export default function DiscussionRoom({
   const [content, setContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [validationInfo, setValidationInfo] = useState<any>(null)
-  const [showChoiceForm, setShowChoiceForm] = useState(false)
-  const [replyToMessage, setReplyToMessage] = useState<any>(null)
+  const [replyToMessage, setReplyToMessage] = useState<MessageData | null>(null)
   const [finalChoice, setFinalChoice] = useState<'A' | 'B' | 'C' | 'D' | ''>('')
   const [finalRationale, setFinalRationale] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Use realtime hooks
-  const { messages, loading } = useRealtimeMessages(
+  const { messages } = useRealtimeMessages(
     group.id,
     currentRound?.id || ''
   )
 
   const currentUser = group.group_members.find(
-    (m: any) => m.user_id === currentUserId
+    (m) => m.user_id === currentUserId
   )
   const { onlineUsers } = useRealtimePresence(
     group.id,
@@ -68,20 +111,25 @@ export default function DiscussionRoom({
     currentUser?.profiles?.display_name || 'Student'
   )
 
-  useEffect(() => {
-    // Validate as user types
-    if (content.trim()) {
-      const minLen = currentRound?.rules?.min_len || 20
-      const validation = validateMessageContent(
-        content,
-        minLen,
-        question.concept_tags ?? undefined
-      )
-      setValidationInfo(validation)
-    } else {
-      setValidationInfo(null)
+  // Helper to safely get min_len from rules
+  const getMinLen = (rules: Json | null | undefined): number => {
+    if (rules && typeof rules === 'object' && !Array.isArray(rules) && 'min_len' in rules) {
+      const minLen = rules.min_len
+      return typeof minLen === 'number' ? minLen : 20
     }
-  }, [content, currentRound, question.concept_tags])
+    return 20
+  }
+
+  // Compute validation info during render instead of in effect
+  const validationInfo = useMemo((): ValidationResult | null => {
+    if (!content.trim()) return null
+    const minLen = getMinLen(currentRound?.rules)
+    return validateMessageContent(
+      content,
+      minLen,
+      question.concept_tags ?? undefined
+    )
+  }, [content, currentRound?.rules, question.concept_tags])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -117,7 +165,6 @@ export default function DiscussionRoom({
       setSubmitting(false)
     } else {
       setContent('')
-      setValidationInfo(null)
       setReplyToMessage(null)
       // Messages will update automatically via realtime
       router.refresh()
@@ -165,7 +212,7 @@ export default function DiscussionRoom({
     return `Round ${roundNo}`
   }
 
-  const minLen = currentRound?.rules?.min_len || 20
+  const minLen = getMinLen(currentRound?.rules)
   const currentLen = content.trim().length
   const progress = Math.min((currentLen / minLen) * 100, 100)
 
@@ -202,7 +249,7 @@ export default function DiscussionRoom({
                 <p>✓ Use key concepts: {question.concept_tags.slice(0, 3).join(', ')}</p>
               )}
               {currentRound.round_no === 2 && <p>✓ Provide examples or edge cases</p>}
-              {currentRound.round_no === 3 && <p>✓ Reply to a peer's message</p>}
+              {currentRound.round_no === 3 && <p>✓ Reply to a peer message</p>}
             </div>
           </div>
         )}
@@ -212,8 +259,8 @@ export default function DiscussionRoom({
           <h3 className="font-semibold text-gray-900 mb-3">Group Members</h3>
           <div className="space-y-2">
             {group.group_members
-              .sort((a: any, b: any) => a.seat_no - b.seat_no)
-              .map((member: any) => {
+              .sort((a, b) => a.seat_no - b.seat_no)
+              .map((member) => {
                 const hasSubmitted = messages.some(
                   (msg) => msg.user_id === member.user_id
                 )
@@ -283,7 +330,7 @@ export default function DiscussionRoom({
                     </div>
 
                     {/* Reply-to indicator */}
-                    {message.reply_to && message.parent_message && (
+                    {message.reply_to_message_id && message.parent_message && (
                       <div className={`mb-2 text-xs italic border-l-2 pl-2 ${
                         isOwn ? 'border-blue-400 text-blue-100' : 'border-gray-300 text-gray-600'
                       }`}>
@@ -298,7 +345,7 @@ export default function DiscussionRoom({
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     {message.meta && (
                       <div className="mt-2 flex gap-2 flex-wrap">
-                        {message.meta.keyword_hits?.length > 0 && (
+                        {(message.meta.keyword_hits?.length ?? 0) > 0 && (
                           <span
                             className={`text-xs px-2 py-0.5 rounded ${
                               isOwn
@@ -366,7 +413,7 @@ export default function DiscussionRoom({
                       clipRule="evenodd"
                     />
                   </svg>
-                  <span className="font-medium">You've submitted for this round!</span>
+                  <span className="font-medium">You have submitted for this round!</span>
                 </div>
                 <p className="text-sm text-gray-600">
                   Waiting for others to complete...
@@ -470,7 +517,7 @@ export default function DiscussionRoom({
 
               {/* Choices */}
               <div className="mb-4 space-y-2">
-                {['A', 'B', 'C', 'D'].map((choice) => (
+                {question.choices && typeof question.choices === 'object' && !Array.isArray(question.choices) && ['A', 'B', 'C', 'D'].map((choice) => (
                   <label
                     key={choice}
                     className="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-gray-50"
@@ -485,7 +532,7 @@ export default function DiscussionRoom({
                     />
                     <div>
                       <div className="font-medium text-gray-900">
-                        {choice}. {question.choices[choice]}
+                        {choice}. {(question.choices as Record<string, string>)[choice]}
                       </div>
                     </div>
                   </label>

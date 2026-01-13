@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { startActivity, endActivity, deleteActivity } from '@/lib/actions/activities'
@@ -61,30 +61,30 @@ export default function ActivityDetailView({ activity }: { activity: Activity })
   const sortedQuestions = [...activity.activity_questions].sort((a, b) => a.order_index - b.order_index)
   const currentQuestion = sortedQuestions[activity.current_question_index]?.questions
 
-  useEffect(() => {
-    if (activity.status === 'running' && currentQuestion) {
-      loadRounds()
-    }
-    loadInvitations()
-  }, [activity.status, currentQuestion])
-
-  const loadInvitations = async () => {
+  const loadInvitations = useCallback(async () => {
     const { data } = await listActivityInvitations(activity.id)
     if (data) {
       setInvitations(data)
     }
-  }
+  }, [activity.id])
 
-  const loadRounds = async () => {
+  const loadRounds = useCallback(async () => {
     if (!currentQuestion) return
 
     const { data } = await getRoundsByActivity(activity.id, currentQuestion.id)
     if (data) {
       setRounds(data)
-      const active = data.find((r: any) => r.status === 'open')
+      const active = data.find((r: { status: string }) => r.status === 'open')
       setCurrentRound(active || null)
     }
-  }
+  }, [activity.id, currentQuestion])
+
+  useEffect(() => {
+    if (activity.status === 'running' && currentQuestion) {
+      loadRounds()
+    }
+    loadInvitations()
+  }, [activity.status, currentQuestion, loadRounds, loadInvitations])
 
   const handleGenerateInvitation = async () => {
     setGeneratingInvite(true)

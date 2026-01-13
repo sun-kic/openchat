@@ -1,4 +1,6 @@
-import { Database } from './database.generated'
+import { Database, Json } from './database.generated'
+
+export type { Json }
 
 // Convenience types
 export type Profile = Database['public']['Tables']['profiles']['Row']

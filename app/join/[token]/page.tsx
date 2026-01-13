@@ -1,37 +1,34 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
 import {
   validateInvitationToken,
   joinActivityWithToken,
 } from '@/lib/actions/student-auth'
+
+type ActivityInfo = {
+  id: string
+  title: string
+  description?: string
+}
 
 export default function JoinActivityPage({
   params,
 }: {
   params: Promise<{ token: string }>
 }) {
-  const router = useRouter()
   const [token, setToken] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activity, setActivity] = useState<any>(null)
+  const [activity, setActivity] = useState<ActivityInfo | null>(null)
 
   const [formData, setFormData] = useState({
     studentNumber: '',
     displayName: '',
   })
 
-  useEffect(() => {
-    params.then(({ token }) => {
-      setToken(token)
-      validateToken(token)
-    })
-  }, [])
-
-  async function validateToken(token: string) {
-    const result = await validateInvitationToken(token)
+  const validateToken = useCallback(async (tokenValue: string) => {
+    const result = await validateInvitationToken(tokenValue)
 
     if (!result.valid) {
       setError(result.error || 'Invalid invitation')
@@ -39,9 +36,16 @@ export default function JoinActivityPage({
       return
     }
 
-    setActivity(result.activity)
+    setActivity(result.activity as ActivityInfo)
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    params.then(({ token: tokenValue }) => {
+      setToken(tokenValue)
+      validateToken(tokenValue)
+    })
+  }, [params, validateToken])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

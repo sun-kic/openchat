@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createTeacherAccount } from '@/lib/actions/admin'
 import Link from 'next/link'
 
+type TeacherCreationResult = {
+  email: string
+  temporaryPassword: string
+}
+
 export default function CreateTeacherPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
@@ -13,7 +18,7 @@ export default function CreateTeacherPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState<any>(null)
+  const [success, setSuccess] = useState<TeacherCreationResult | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -25,8 +30,8 @@ export default function CreateTeacherPage() {
       formData.displayName
     )
 
-    if (result.error) {
-      setError(result.error)
+    if (result.error || !result.teacher) {
+      setError(result.error || 'Failed to create teacher account')
       setLoading(false)
       return
     }

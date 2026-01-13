@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signInWithEmail } from '@/lib/actions/auth'
-import Link from 'next/link'
 
 export default function LoginPage() {
   const router = useRouter()

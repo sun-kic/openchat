@@ -77,6 +77,7 @@ export default function DiscussionRoom({
   question,
   group,
   currentRound,
+  allRounds,
   currentUserId,
   isLeader,
 }: {
@@ -84,6 +85,7 @@ export default function DiscussionRoom({
   question: Question
   group: Group
   currentRound: Round | null
+  allRounds: Round[]
   currentUserId: string
   isLeader: boolean
 }) {
@@ -222,6 +224,10 @@ export default function DiscussionRoom({
     submittedUserIds.has(member.user_id)
   ).length
   const allMembersSubmitted = submittedCount === totalMembers
+
+  // Check if all 3 rounds are truly complete (round 3 exists and is closed)
+  const round3 = allRounds.find(r => r.round_no === 3)
+  const allRoundsComplete = round3 && round3.status === 'closed'
 
   return (
     <div className="h-full flex">
@@ -512,7 +518,7 @@ export default function DiscussionRoom({
               </div>
             </form>
           </div>
-        ) : !currentRound && isLeader && !group.final_choice ? (
+        ) : !currentRound && allRoundsComplete && isLeader && !group.final_choice ? (
           <div className="border-t border-gray-200 bg-white p-4">
             <h3 className="font-semibold text-gray-900 mb-4">
               Submit Final Group Answer
@@ -575,7 +581,7 @@ export default function DiscussionRoom({
               </button>
             </form>
           </div>
-        ) : !currentRound && !isLeader && !group.final_choice ? (
+        ) : !currentRound && allRoundsComplete && !isLeader && !group.final_choice ? (
           <div className="border-t border-gray-200 bg-white p-4">
             <div className="text-center py-6">
               <div className="text-blue-600 mb-2 flex items-center justify-center gap-2">
@@ -592,7 +598,7 @@ export default function DiscussionRoom({
               </p>
             </div>
           </div>
-        ) : !currentRound && group.final_choice ? (
+        ) : !currentRound && allRoundsComplete && group.final_choice ? (
           <div className="border-t border-gray-200 bg-white p-4 text-center py-6">
             <div className="text-green-600 mb-2 flex items-center justify-center gap-2">
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">

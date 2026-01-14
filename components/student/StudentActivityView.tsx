@@ -87,6 +87,7 @@ export default function StudentActivityView({
   const [activity, setActivity] = useState(initialActivity)
   const [userGroup] = useState(initialUserGroup)
   const [currentRound, setCurrentRound] = useState<Round | null>(null)
+  const [allRounds, setAllRounds] = useState<Round[]>([])
   const [loading, setLoading] = useState(true)
 
   const sortedQuestions = [...activity.activity_questions].sort(
@@ -112,8 +113,16 @@ export default function StudentActivityView({
   const loadCurrentRound = useCallback(async () => {
     if (!currentQuestion) return
 
-    const { data } = await getCurrentRound(activity.id, currentQuestion.id)
-    setCurrentRound(data)
+    // Load both current round and all rounds history
+    const [currentRoundResult, allRoundsResult] = await Promise.all([
+      getCurrentRound(activity.id, currentQuestion.id),
+      import('@/lib/actions/rounds').then(mod => mod.getRoundsByActivity(activity.id, currentQuestion.id))
+    ])
+
+    setCurrentRound(currentRoundResult.data)
+    if (allRoundsResult.data) {
+      setAllRounds(allRoundsResult.data)
+    }
     setLoading(false)
   }, [activity.id, currentQuestion])
 
@@ -351,6 +360,7 @@ export default function StudentActivityView({
           question={currentQuestion}
           group={userGroup}
           currentRound={currentRound}
+          allRounds={allRounds}
           currentUserId={currentUserId}
           isLeader={isLeader}
         />

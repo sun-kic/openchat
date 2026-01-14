@@ -220,6 +220,14 @@ export default function DiscussionRoom({
     (msg) => msg.user_id === currentUserId
   )
 
+  // Check how many group members have submitted
+  const submittedUserIds = new Set(messages.map(msg => msg.user_id))
+  const totalMembers = group.group_members.length
+  const submittedCount = group.group_members.filter(member =>
+    submittedUserIds.has(member.user_id)
+  ).length
+  const allMembersSubmitted = submittedCount === totalMembers
+
   return (
     <div className="h-full flex">
       {/* Sidebar - Question & Instructions */}
@@ -414,9 +422,23 @@ export default function DiscussionRoom({
                   </svg>
                   <span className="font-medium">You have submitted for this round!</span>
                 </div>
-                <p className="text-sm text-gray-600">
-                  Waiting for others to complete...
-                </p>
+                {allMembersSubmitted ? (
+                  <div className="text-sm space-y-1">
+                    <p className="text-green-600 font-medium">
+                      ✓ All {totalMembers} group members have submitted!
+                    </p>
+                    <p className="text-gray-600">
+                      Waiting for your teacher to end the round...
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    Waiting for {totalMembers - submittedCount} more {totalMembers - submittedCount === 1 ? 'member' : 'members'} to complete...
+                    <span className="text-gray-500 block mt-1">
+                      ({submittedCount}/{totalMembers} submitted)
+                    </span>
+                  </p>
+                )}
               </div>
             ) : (
               <form onSubmit={handleSubmit}>

@@ -215,12 +215,7 @@ export default function DiscussionRoom({
   const currentLen = content.trim().length
   const progress = Math.min((currentLen / minLen) * 100, 100)
 
-  // Check if user has submitted in current round
-  const userHasSubmitted = messages.some(
-    (msg) => msg.user_id === currentUserId
-  )
-
-  // Check how many group members have submitted
+  // Check how many group members have submitted at least one message
   const submittedUserIds = new Set(messages.map(msg => msg.user_id))
   const totalMembers = group.group_members.length
   const submittedCount = group.group_members.filter(member =>
@@ -251,7 +246,8 @@ export default function DiscussionRoom({
               {getRoundName(currentRound.round_no)}
             </h3>
             <div className="text-sm text-blue-800 space-y-1">
-              <p>✓ Minimum {minLen} characters</p>
+              <p>✓ Send at least one message</p>
+              <p>✓ Minimum {minLen} characters per message</p>
               {question.concept_tags && question.concept_tags.length > 0 && (
                 <p>✓ Use key concepts: {question.concept_tags.slice(0, 3).join(', ')}</p>
               )}
@@ -292,8 +288,12 @@ export default function DiscussionRoom({
                       {member.profiles.display_name}
                       {member.user_id === currentUserId && ' (You)'}
                     </span>
-                    {hasSubmitted && (
-                      <span className="text-green-600">✓</span>
+                    {currentRound && (
+                      hasSubmitted ? (
+                        <span className="text-green-600 text-xs">✓ Sent</span>
+                      ) : (
+                        <span className="text-orange-500 text-xs">Pending</span>
+                      )
                     )}
                   </div>
                 )
@@ -389,7 +389,7 @@ export default function DiscussionRoom({
                     )}
 
                     {/* Reply button for Round 3 */}
-                    {currentRound?.round_no === 3 && !isOwn && !userHasSubmitted && (
+                    {currentRound?.round_no === 3 && !isOwn && (
                       <button
                         onClick={() => setReplyToMessage(message)}
                         className={`mt-2 text-xs underline ${
@@ -410,118 +410,107 @@ export default function DiscussionRoom({
         {/* Input Area */}
         {currentRound ? (
           <div className="border-t border-gray-200 bg-white p-4">
-            {userHasSubmitted ? (
-              <div className="text-center py-6">
-                <div className="text-green-600 mb-2 flex items-center justify-center gap-2">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <span className="font-medium">You have submitted for this round!</span>
-                </div>
-                {allMembersSubmitted ? (
-                  <div className="text-sm space-y-1">
-                    <p className="text-green-600 font-medium">
-                      ✓ All {totalMembers} group members have submitted!
-                    </p>
-                    <p className="text-gray-600">
-                      Waiting for your teacher to end the round...
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    Waiting for {totalMembers - submittedCount} more {totalMembers - submittedCount === 1 ? 'member' : 'members'} to complete...
-                    <span className="text-gray-500 block mt-1">
-                      ({submittedCount}/{totalMembers} submitted)
-                    </span>
-                  </p>
-                )}
+            {/* Status Banner */}
+            {allMembersSubmitted ? (
+              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded text-sm">
+                <p className="text-green-700 font-medium">
+                  ✓ All {totalMembers} group members have sent at least one message!
+                </p>
+                <p className="text-green-600 text-xs mt-1">
+                  You can continue the discussion while waiting for the teacher to end the round.
+                </p>
               </div>
-            ) : (
-              <form onSubmit={handleSubmit}>
-                {error && (
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
-                    {error}
-                  </div>
-                )}
+            ) : submittedUserIds.has(currentUserId) ? (
+              <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                <p className="text-blue-700">
+                  You can send more messages. Waiting for {totalMembers - submittedCount} more {totalMembers - submittedCount === 1 ? 'member' : 'members'}...
+                </p>
+                <p className="text-blue-600 text-xs mt-1">
+                  ({submittedCount}/{totalMembers} have sent at least one message)
+                </p>
+              </div>
+            ) : null}
 
-                {/* Reply-to indicator */}
-                {replyToMessage && (
-                  <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="font-medium text-blue-900">
-                          Replying to {replyToMessage.profiles.display_name}:
-                        </span>
-                        <p className="text-blue-700 mt-1">
-                          {replyToMessage.content.substring(0, 100)}
-                          {replyToMessage.content.length > 100 && '...'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setReplyToMessage(null)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder={
-                    replyToMessage
-                      ? `Reply to ${replyToMessage.profiles.display_name}...`
-                      : `Share your thoughts (min ${minLen} chars)...`
-                  }
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-
-                {/* Progress Indicator */}
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex-1 mr-4">
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all ${
-                          progress >= 100
-                            ? 'bg-green-500'
-                            : progress >= 50
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                        }`}
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>
-                        {currentLen} / {minLen} chars
-                      </span>
-                      {validationInfo && (
-                        <span className="text-green-600">
-                          {validationInfo.meta.keyword_hits?.length || 0} keywords •
-                          {validationInfo.meta.has_causality ? ' ✓ causality' : ''}
-                          {validationInfo.meta.has_example ? ' ✓ example' : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submitting || !validationInfo?.valid}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? 'Sending...' : 'Send'}
-                  </button>
+            <form onSubmit={handleSubmit}>
+              {error && (
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                  {error}
                 </div>
-              </form>
-            )}
+              )}
+
+              {/* Reply-to indicator */}
+              {replyToMessage && (
+                <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-medium text-blue-900">
+                        Replying to {replyToMessage.profiles.display_name}:
+                      </span>
+                      <p className="text-blue-700 mt-1">
+                        {replyToMessage.content.substring(0, 100)}
+                        {replyToMessage.content.length > 100 && '...'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyToMessage(null)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder={
+                  replyToMessage
+                    ? `Reply to ${replyToMessage.profiles.display_name}...`
+                    : `Share your thoughts (min ${minLen} chars)...`
+                }
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+
+              {/* Progress Indicator */}
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex-1 mr-4">
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        progress >= 100
+                          ? 'bg-green-500'
+                          : progress >= 50
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                      }`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>
+                      {currentLen} / {minLen} chars
+                    </span>
+                    {validationInfo && (
+                      <span className="text-green-600">
+                        {validationInfo.meta.keyword_hits?.length || 0} keywords •
+                        {validationInfo.meta.has_causality ? ' ✓ causality' : ''}
+                        {validationInfo.meta.has_example ? ' ✓ example' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting || !validationInfo?.valid}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </form>
           </div>
         ) : !currentRound && isLeader && !group.final_choice ? (
           <div className="border-t border-gray-200 bg-white p-4">
@@ -586,6 +575,23 @@ export default function DiscussionRoom({
               </button>
             </form>
           </div>
+        ) : !currentRound && !isLeader && !group.final_choice ? (
+          <div className="border-t border-gray-200 bg-white p-4">
+            <div className="text-center py-6">
+              <div className="text-blue-600 mb-2 flex items-center justify-center gap-2">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span className="font-medium">All rounds complete!</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                Waiting for your group leader to submit the final answer...
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                You can continue reviewing the discussion above
+              </p>
+            </div>
+          </div>
         ) : !currentRound && group.final_choice ? (
           <div className="border-t border-gray-200 bg-white p-4 text-center py-6">
             <div className="text-green-600 mb-2 flex items-center justify-center gap-2">
@@ -603,8 +609,9 @@ export default function DiscussionRoom({
             </p>
           </div>
         ) : (
-          <div className="border-t border-gray-200 bg-white p-4 text-center text-gray-500">
-            Waiting for round to start...
+          <div className="border-t border-gray-200 bg-white p-4 text-center text-gray-500 py-6">
+            <p>Waiting for round to start...</p>
+            <p className="text-xs mt-2">Your teacher will begin the discussion rounds soon</p>
           </div>
         )}
       </div>

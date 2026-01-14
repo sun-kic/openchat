@@ -166,9 +166,8 @@ export default function DiscussionRoom({
     } else {
       setContent('')
       setReplyToMessage(null)
-      // Messages will update automatically via realtime
-      router.refresh()
       setSubmitting(false)
+      // Messages will update automatically via realtime subscription and polling
     }
   }
 

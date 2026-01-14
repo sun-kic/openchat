@@ -79,8 +79,15 @@ export function useRealtimeMessages(groupId: string, roundId: string) {
       )
       .subscribe()
 
+    // Polling fallback for message updates (every 3 seconds)
+    // This ensures messages update even when realtime fails due to RLS policies
+    const pollInterval = setInterval(() => {
+      fetchMessages()
+    }, 3000) // Poll every 3 seconds
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
   }, [groupId, roundId, supabase, fetchMessages])
 
